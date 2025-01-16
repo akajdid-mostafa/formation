@@ -1,13 +1,17 @@
 'use client';
 
 import { useState, ChangeEvent, FormEvent } from 'react';
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { X } from 'lucide-react'
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { X } from 'lucide-react';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { app } from '@/lib/firebase'; // Adjust the import based on your Firebase setup
+
+const storage = getStorage(app);
 
 interface ProfessorFormProps {
   addProfessor: (newProfessor: {
@@ -29,12 +33,45 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
   });
 
   const [certificateInput, setCertificateInput] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    addProfessor(formData);
-    setFormData({ firstName: '', lastName: '', image: '', profile: '', certificates: [] });
-    setCertificateInput('');
+    setIsUploading(true);
+
+    try {
+      if (imageFile) {
+        // Upload the image to Firebase Storage
+        const storageRef = ref(storage, `professors/${imageFile.name}`);
+        await uploadBytes(storageRef, imageFile);
+        const imageUrl = await getDownloadURL(storageRef);
+
+        // Update the form data with the image URL
+        const newProfessor = {
+          ...formData,
+          image: imageUrl,
+        };
+
+        // Call the addProfessor function with the updated data
+        addProfessor(newProfessor);
+
+        // Reset the form
+        setFormData({ firstName: '', lastName: '', image: '', profile: '', certificates: [] });
+        setCertificateInput('');
+        setImageFile(null);
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -98,13 +135,13 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="image">Image URL</Label>
+            <Label htmlFor="image">Upload Image</Label>
             <Input
-              type="url"
+              type="file"
               id="image"
               name="image"
-              value={formData.image}
-              onChange={handleChange}
+              accept="image/*"
+              onChange={handleImageChange}
               required
             />
           </div>
@@ -159,12 +196,11 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
             </div>
           )}
 
-          <Button type="submit" className="w-full">
-            Create Professor
+          <Button type="submit" className="w-full" disabled={isUploading}>
+            {isUploading ? 'Uploading...' : 'Create Professor'}
           </Button>
         </form>
       </CardContent>
     </Card>
   );
 }
-

@@ -1,7 +1,20 @@
 'use client';
 
 import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
-import Createprof from '../professors/ProfessorForm';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "@/hooks/use-toast";
+import ProfessorForm from './professor-form';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { app } from '@/lib/firebase'; // Adjust the import based on your Firebase setup
+import { X } from 'lucide-react'; // Import the X icon
+
+const storage = getStorage(app);
 
 interface FormData {
   title: string;
@@ -13,7 +26,7 @@ interface FormData {
   prerequisites: string;
   description: string;
   detail: string;
-  images: string[];
+  images: (string | File)[]; // Allow both string URLs and File objects
   professorIds: number[];
 }
 
@@ -21,6 +34,9 @@ interface Professor {
   id: number;
   firstName: string;
   lastName: string;
+  image: string;
+  profile: string;
+  certificates: string[];
 }
 
 export default function FormationForm() {
@@ -39,34 +55,54 @@ export default function FormationForm() {
   });
 
   const [professors, setProfessors] = useState<Professor[]>([]);
-  const [newProfessor, setNewProfessor] = useState({
-    firstName: '',
-    lastName: '',
-    image: '',
-    profile: '',
-    certificates: '',
-  });
+  const [showNewProfessorForm, setShowNewProfessorForm] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  // Fetch professors on component mount
   useEffect(() => {
     fetchProfessors();
   }, []);
 
   const fetchProfessors = async () => {
-    const response = await fetch('/api/professors');
-    const data = await response.json();
-    setProfessors(data);
+    try {
+      const response = await fetch('/api/professors');
+      if (!response.ok) {
+        throw new Error('Failed to fetch professors');
+      }
+      const data = await response.json();
+      setProfessors(data);
+    } catch (error) {
+      console.error('Error fetching professors:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch professors. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setIsUploading(true);
 
     try {
+      // Upload images to Firebase Storage and get their URLs
+      const imageUrls = await Promise.all(
+        formData.images.map(async (image) => {
+          if (typeof image === 'string') {
+            return image; // If it's already a URL, keep it
+          }
+          const storageRef = ref(storage, `formations/${image.name}`);
+          await uploadBytes(storageRef, image);
+          return await getDownloadURL(storageRef);
+        })
+      );
+
       const payload = {
         ...formData,
+        images: imageUrls, // Replace file objects with their URLs
         duration: parseInt(formData.duration, 10),
         classSize: parseInt(formData.classSize, 10),
-        professorIds: formData.professorIds, // Already numbers
+        professorIds: formData.professorIds,
       };
 
       const response = await fetch('/api/formations', {
@@ -75,14 +111,13 @@ export default function FormationForm() {
         body: JSON.stringify(payload),
       });
 
-      const responseData = await response.json();
-      console.log('Response:', responseData);
-
       if (!response.ok) {
         throw new Error('Failed to create formation');
       }
 
-      // Reset form after successful submission
+      const responseData = await response.json();
+      console.log('Response:', responseData);
+
       setFormData({
         title: '',
         startDate: '',
@@ -96,10 +131,19 @@ export default function FormationForm() {
         images: [],
         professorIds: [],
       });
-      alert('Formation created successfully!');
+      toast({
+        title: "Success",
+        description: "Formation created successfully!",
+      });
     } catch (error) {
       console.error('Error:', error);
-      alert('An error occurred. Please try again.');
+      toast({
+        title: "Error",
+        description: "An error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -109,21 +153,22 @@ export default function FormationForm() {
   };
 
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
-    setFormData({ ...formData, images: [...formData.images, value] });
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setFormData({ ...formData, images: [...formData.images, ...files] });
+    }
   };
 
-  const handleProfessorChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    const selectedIds = Array.from(e.target.selectedOptions, (option) => parseInt(option.value, 10));
-    setFormData({ ...formData, professorIds: selectedIds });
+  const handleProfessorChange = (professorId: number) => {
+    setFormData(prev => ({
+      ...prev,
+      professorIds: prev.professorIds.includes(professorId)
+        ? prev.professorIds.filter(id => id !== professorId)
+        : [...prev.professorIds, professorId]
+    }));
   };
 
-  const handleNewProfessorChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewProfessor({ ...newProfessor, [name]: value });
-  };
-
-  const addNewProfessor = async () => {
+  const addProfessor = async (newProfessor: Omit<Professor, 'id'>) => {
     try {
       const response = await fetch('/api/professors', {
         method: 'POST',
@@ -131,236 +176,213 @@ export default function FormationForm() {
         body: JSON.stringify(newProfessor),
       });
 
-      const data = await response.json();
-      if (response.ok) {
-        // Add the new professor to the list and select it
-        setProfessors([...professors, data]);
-        setFormData({ ...formData, professorIds: [...formData.professorIds, data.id] });
-        setNewProfessor({ firstName: '', lastName: '', image: '', profile: '', certificates: '' });
-        alert('Professor added successfully!');
-      } else {
+      if (!response.ok) {
         throw new Error('Failed to add professor');
       }
+
+      const createdProfessor = await response.json();
+      setProfessors(prevProfessors => [...prevProfessors, createdProfessor]);
+      setShowNewProfessorForm(false);
+      toast({
+        title: "Success",
+        description: "Professor added successfully!",
+      });
     } catch (error) {
       console.error('Error adding professor:', error);
-      alert('An error occurred. Please try again.');
+      toast({
+        title: "Error",
+        description: "Failed to add professor. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
-  // const addProfessor = async (newProfessor: Omit<Professor, 'id'>) => {
-  //   try {
-  //     const response = await fetch('/api/professors', {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json' },
-  //       body: JSON.stringify(newProfessor),
-  //     });
-
-  //     if (!response.ok) {
-  //       throw new Error('Failed to add professor');
-  //     }
-
-  //     const createdProfessor = await response.json();
-  //     setProfessors((prevProfessors) => [...prevProfessors, createdProfessor]);
-  //   } catch (error) {
-  //     console.error('Error adding professor:', error);
-  //   }
-  // };
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <input
-        type="text"
-        name="title"
-        value={formData.title}
-        onChange={handleChange}
-        placeholder="Formation Title"
-        className="w-full p-2 border rounded"
-        required
-      />
-      <input
-        type="date"
-        name="startDate"
-        value={formData.startDate}
-        onChange={handleChange}
-        className="w-full p-2 border rounded"
-        required
-      />
-      <input
-        type="date"
-        name="endDate"
-        value={formData.endDate}
-        onChange={handleChange}
-        className="w-full p-2 border rounded"
-        required
-      />
-      <input
-        type="number"
-        name="duration"
-        value={formData.duration}
-        onChange={handleChange}
-        placeholder="Duration (hours)"
-        className="w-full p-2 border rounded"
-        required
-      />
-      <input
-        type="text"
-        name="location"
-        value={formData.location}
-        onChange={handleChange}
-        placeholder="Location"
-        className="w-full p-2 border rounded"
-        required
-      />
-      <input
-        type="number"
-        name="classSize"
-        value={formData.classSize}
-        onChange={handleChange}
-        placeholder="Class Size"
-        className="w-full p-2 border rounded"
-        required
-      />
-      <input
-        type="text"
-        name="prerequisites"
-        value={formData.prerequisites}
-        onChange={handleChange}
-        placeholder="Prerequisites"
-        className="w-full p-2 border rounded"
-        required
-      />
-      <textarea
-        name="description"
-        value={formData.description}
-        onChange={handleChange}
-        placeholder="Description"
-        className="w-full p-2 border rounded"
-        rows={5}
-        required
-      ></textarea>
-      <textarea
-        name="detail"
-        value={formData.detail}
-        onChange={handleChange}
-        placeholder="Details"
-        className="w-full p-2 border rounded"
-        rows={5}
-        required
-      ></textarea>
-
-      {/* Image URLs */}
-      <div>
-        <h4 className="text-lg font-bold mb-2">Images:</h4>
-        {formData.images.map((image, index) => (
-          <div key={index} className="flex items-center space-x-2 mb-2">
-            <input
-              type="url"
-              value={image}
-              onChange={(e) => {
-                const newImages = [...formData.images];
-                newImages[index] = e.target.value;
-                setFormData({ ...formData, images: newImages });
-              }}
-              placeholder="Image URL"
-              className="w-full p-2 border rounded"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const newImages = formData.images.filter((_, i) => i !== index);
-                setFormData({ ...formData, images: newImages });
-              }}
-              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-            >
-              Remove
-            </button>
+    <Card className="w-full max-w-4xl mx-auto">
+      <CardHeader>
+        <CardTitle className="text-2xl font-bold text-center">Create New Formation</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">Formation Title</Label>
+              <Input
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                placeholder="Enter formation title"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                placeholder="Enter location"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                name="startDate"
+                type="date"
+                value={formData.startDate}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                name="endDate"
+                type="date"
+                value={formData.endDate}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="duration">Duration (hours)</Label>
+              <Input
+                id="duration"
+                name="duration"
+                type="number"
+                value={formData.duration}
+                onChange={handleChange}
+                placeholder="Enter duration"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="classSize">Class Size</Label>
+              <Input
+                id="classSize"
+                name="classSize"
+                type="number"
+                value={formData.classSize}
+                onChange={handleChange}
+                placeholder="Enter class size"
+                required
+              />
+            </div>
           </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => setFormData({ ...formData, images: [...formData.images, ''] })}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Add Image URL
-        </button>
-      </div>
 
-      {/* Professor Selection */}
-      <div>
-        <h4 className="text-lg font-bold mb-2">Professors:</h4>
-        <select
-          name="professorIds"
-          multiple
-          value={formData.professorIds.map(String)}
-          onChange={handleProfessorChange}
-          className="w-full p-2 border rounded"
-        >
-          {professors.map((professor) => (
-            <option key={professor.id} value={professor.id}>
-              {professor.firstName} {professor.lastName}
-            </option>
-          ))}
-        </select>
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="prerequisites">Prerequisites</Label>
+            <Input
+              id="prerequisites"
+              name="prerequisites"
+              value={formData.prerequisites}
+              onChange={handleChange}
+              placeholder="Enter prerequisites"
+              required
+            />
+          </div>
 
-      {/* Add New Professor */}
-      {/* <Createprof  addProfessor={addProfessor} /> */}
-      <div>
-        
-        <h4 className="text-lg font-bold mb-2">Add New Professor:</h4>
-        <input
-          type="text"
-          name="firstName"
-          value={newProfessor.firstName}
-          onChange={handleNewProfessorChange}
-          placeholder="First Name"
-          className="w-full p-2 border rounded mb-2"
-        />
-        <input
-          type="text"
-          name="lastName"
-          value={newProfessor.lastName}
-          onChange={handleNewProfessorChange}
-          placeholder="Last Name"
-          className="w-full p-2 border rounded mb-2"
-        />
-        <input
-          type="url"
-          name="image"
-          value={newProfessor.image}
-          onChange={handleNewProfessorChange}
-          placeholder="Image URL"
-          className="w-full p-2 border rounded mb-2"
-        />
-        <input
-          type="text"
-          name="profile"
-          value={newProfessor.profile}
-          onChange={handleNewProfessorChange}
-          placeholder="Profile"
-          className="w-full p-2 border rounded mb-2"
-        />
-        <input
-          type="text"
-          name="certificates"
-          value={newProfessor.certificates}
-          onChange={handleNewProfessorChange}
-          placeholder="Certificates"
-          className="w-full p-2 border rounded mb-2"
-        />
-        <button
-          type="button"
-          onClick={addNewProfessor}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-        >
-          Add Professor
-        </button>
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              placeholder="Enter description"
+              rows={3}
+              required
+            />
+          </div>
 
-      {/* Submit Button */}
-      <button type="submit" className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-        Create Formation
-      </button>
-    </form>
+          <div className="space-y-2">
+            <Label htmlFor="detail">Details</Label>
+            <Textarea
+              id="detail"
+              name="detail"
+              value={formData.detail}
+              onChange={handleChange}
+              placeholder="Enter details"
+              rows={5}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Images</Label>
+            <Input
+              type="file"
+              multiple
+              onChange={handleImageChange}
+              accept="image/*"
+            />
+            <div className="flex flex-wrap gap-2">
+              {formData.images.map((image, index) => (
+                <div key={index} className="relative">
+                  <img
+                    src={typeof image === 'string' ? image : URL.createObjectURL(image)}
+                    alt={`Formation Image ${index + 1}`}
+                    className="w-24 h-24 object-cover rounded-md"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="absolute top-0 right-0 p-1"
+                    onClick={() => {
+                      const newImages = formData.images.filter((_, i) => i !== index);
+                      setFormData({ ...formData, images: newImages });
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <Label>Professors</Label>
+            <ScrollArea className="h-[200px] w-full border rounded-md p-4">
+              {professors.map((professor) => (
+                <div key={professor.id} className="flex items-center space-x-2 py-2">
+                  <Checkbox
+                    id={`professor-${professor.id}`}
+                    checked={formData.professorIds.includes(professor.id)}
+                    onCheckedChange={() => handleProfessorChange(professor.id)}
+                  />
+                  <Label htmlFor={`professor-${professor.id}`}>
+                    {professor.firstName} {professor.lastName}
+                  </Label>
+                </div>
+              ))}
+            </ScrollArea>
+            <Button type="button" onClick={() => setShowNewProfessorForm(!showNewProfessorForm)}>
+              {showNewProfessorForm ? 'Hide Professor Form' : 'Add New Professor'}
+            </Button>
+          </div>
+
+          <Button type="submit" className="w-full" disabled={isUploading}>
+            {isUploading ? 'Uploading...' : 'Create Formation'}
+          </Button>
+        </form>
+
+        {showNewProfessorForm && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Add New Professor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProfessorForm addProfessor={addProfessor} />
+            </CardContent>
+          </Card>
+        )}
+      </CardContent>
+    </Card>
   );
 }

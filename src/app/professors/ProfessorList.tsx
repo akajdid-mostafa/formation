@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { X } from 'lucide-react';
+import { useState, ChangeEvent } from 'react';
+import {
+  getStorage, ref, uploadBytes, getDownloadURL, deleteObject, getMetadata 
+} from "firebase/storage";
+import { app } from "@/lib/firebase";
+import { X } from "lucide-react";
+import { FirebaseError } from 'firebase/app'; // Import FirebaseError for type checking
 
 interface Professor {
   id: number;
@@ -24,6 +29,9 @@ export default function ProfessorList({
   const [selectedProfessor, setSelectedProfessor] = useState<Professor | null>(
     null
   );
+  const storage = getStorage(app);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [professorToDelete, setProfessorToDelete] = useState<number | null>(
@@ -53,22 +61,53 @@ export default function ProfessorList({
   const handleUpdateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedProfessor) return;
-
-    const payload = {
-      firstName: selectedProfessor.firstName,
-      lastName: selectedProfessor.lastName,
-      image: selectedProfessor.image,
-      profile: selectedProfessor.profile,
-      certificates: selectedProfessor.certificates || [],
-    };
-
+  
+    let newImageUrl = selectedProfessor.image;
+  
     try {
+      // Check if a new image file is selected
+      const newImageFile = (document.getElementById('updateImage') as HTMLInputElement)?.files?.[0];
+      if (newImageFile) {
+        // Upload the new image to Firebase Storage
+        const newImageRef = ref(storage, `professors/${newImageFile.name}`);
+        await uploadBytes(newImageRef, newImageFile);
+        newImageUrl = await getDownloadURL(newImageRef);
+  
+        // Delete the old image from Firebase Storage (if it exists)
+        if (selectedProfessor.image) {
+          const oldImageRef = ref(storage, selectedProfessor.image);
+  
+          // Check if the old image exists before attempting to delete it
+          try {
+            await getMetadata(oldImageRef); // Check if the image exists
+            await deleteObject(oldImageRef); // Delete the image if it exists
+          } catch (error) {
+            // Narrow down the type of the error
+            if (error instanceof FirebaseError && error.code === 'storage/object-not-found') {
+              console.log('Old image not found in Firebase Storage. Skipping deletion.');
+            } else {
+              throw error; // Re-throw other errors
+            }
+          }
+        }
+      }
+  
+      // Update the professor's data with the new image URL
+      const payload = {
+        firstName: selectedProfessor.firstName,
+        lastName: selectedProfessor.lastName,
+        image: newImageUrl,
+        profile: selectedProfessor.profile,
+        certificates: selectedProfessor.certificates || [],
+      };
+  
+      // Call the API to update the professor
       const response = await fetch(`/api/professors/${selectedProfessor.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
+  
       if (response.ok) {
         const updatedProfessor = await response.json();
         setProfessors(
@@ -80,7 +119,7 @@ export default function ProfessorList({
         setSelectedProfessor(null);
       }
     } catch (error) {
-      console.log("Error updating professor:", error);
+      console.error('Error updating professor:', error);
     }
   };
 
@@ -117,6 +156,16 @@ export default function ProfessorList({
     }
   };
 
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      // Create a preview URL for the new image
+      const previewUrl = URL.createObjectURL(file);
+      setNewImagePreview(previewUrl);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -137,10 +186,14 @@ export default function ProfessorList({
                 <h3 className="text-xl font-bold mb-2 text-gray-800">
                   {professor.firstName} {professor.lastName}
                 </h3>
-                <p className="text-gray-600 mb-4 line-clamp-2">{professor.profile}</p>
+                <p className="text-gray-600 mb-4 line-clamp-2">
+                  {professor.profile}
+                </p>
                 {professor.certificates.length > 0 && (
                   <div className="mb-4">
-                    <h4 className="text-sm font-semibold text-gray-500 mb-2">Certificates</h4>
+                    <h4 className="text-sm font-semibold text-gray-500 mb-2">
+                      Certificates
+                    </h4>
                     <div className="flex flex-wrap gap-2">
                       {professor.certificates.map((cert, index) => (
                         <span
@@ -223,18 +276,29 @@ export default function ProfessorList({
               </div>
 
               <div>
-                <label className="block text-lg mb-2">Image URL</label>
+                <label className="block text-lg mb-2">Image</label>
+                {/* Show old image if no new image is selected */}
+                {!newImagePreview && (
+                  <img
+                    src={selectedProfessor.image}
+                    alt="Old Professor Image"
+                    className="w-32 h-32 object-cover rounded-lg mb-4"
+                  />
+                )}
+                {/* Show new image preview if a new image is selected */}
+                {newImagePreview && (
+                  <img
+                    src={newImagePreview}
+                    alt="New Professor Image Preview"
+                    className="w-32 h-32 object-cover rounded-lg mb-4"
+                  />
+                )}
                 <input
-                  type="url"
-                  value={selectedProfessor.image}
-                  onChange={(e) =>
-                    setSelectedProfessor({
-                      ...selectedProfessor,
-                      image: e.target.value,
-                    })
-                  }
+                  type="file"
+                  id="updateImage"
+                  accept="image/*"
+                  onChange={handleImageChange}
                   className="w-full p-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
                 />
               </div>
 
@@ -253,9 +317,11 @@ export default function ProfessorList({
                 />
               </div>
 
+              {/* Certificates Section */}
               <div className="mb-4">
-                <label className="text-xl font-semibold mb-4 block">Certificates</label>
-
+                <label className="text-xl font-semibold mb-4 block">
+                  Certificates
+                </label>
                 <div className="mb-4 flex items-center gap-2">
                   <input
                     type="text"
@@ -297,7 +363,9 @@ export default function ProfessorList({
 
                 {selectedProfessor.certificates.length > 0 && (
                   <div>
-                    <h4 className="text-xl font-semibold mb-3">Added Certificates</h4>
+                    <h4 className="text-xl font-semibold mb-3">
+                      Added Certificates
+                    </h4>
                     <div className="flex flex-wrap gap-2">
                       {selectedProfessor.certificates.map((cert, index) => (
                         <div
@@ -330,7 +398,10 @@ export default function ProfessorList({
               <div className="flex justify-end gap-4">
                 <button
                   type="button"
-                  onClick={() => setIsUpdateModalOpen(false)}
+                  onClick={() => {
+                    setIsUpdateModalOpen(false);
+                    setNewImagePreview(null); // Reset the new image preview when closing the modal
+                  }}
                   className="px-6 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -353,7 +424,8 @@ export default function ProfessorList({
           <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-8">
             <h3 className="text-2xl font-bold mb-4">Delete Professor</h3>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this professor? This action cannot be undone.
+              Are you sure you want to delete this professor? This action cannot
+              be undone.
             </p>
             <div className="flex justify-end gap-4">
               <button
@@ -375,4 +447,3 @@ export default function ProfessorList({
     </div>
   );
 }
-
