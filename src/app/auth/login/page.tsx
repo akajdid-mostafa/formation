@@ -15,6 +15,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push('/'); // Redirect to home page after login
+      // Redirect to home page after login
     } catch (error) {
       alert(error);
     }
