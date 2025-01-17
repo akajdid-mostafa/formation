@@ -20,13 +20,13 @@ interface FormData {
   title: string;
   startDate: string;
   endDate: string;
-  duration: string;
+  duration: string; // Changed to string
   location: string;
   classSize: string;
   prerequisites: string;
   description: string;
   detail: string;
-  images: (string | File)[]; // Allow both string URLs and File objects
+  images: (string | File)[];
   professorIds: number[];
 }
 
@@ -57,6 +57,7 @@ export default function FormationForm() {
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [showNewProfessorForm, setShowNewProfessorForm] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [timeUnit, setTimeUnit] = useState<string>('hours'); // New state for time unit
 
   useEffect(() => {
     fetchProfessors();
@@ -85,6 +86,9 @@ export default function FormationForm() {
     setIsUploading(true);
 
     try {
+      // Combine duration value and time unit
+      const durationWithUnit = `${formData.duration} ${timeUnit}`;
+
       // Upload images to Firebase Storage and get their URLs
       const imageUrls = await Promise.all(
         formData.images.map(async (image) => {
@@ -99,8 +103,8 @@ export default function FormationForm() {
 
       const payload = {
         ...formData,
+        duration: durationWithUnit, // Use the combined duration string
         images: imageUrls, // Replace file objects with their URLs
-        duration: parseInt(formData.duration, 10),
         classSize: parseInt(formData.classSize, 10),
         professorIds: formData.professorIds,
       };
@@ -250,16 +254,30 @@ export default function FormationForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="duration">Duration (hours)</Label>
-              <Input
-                id="duration"
-                name="duration"
-                type="number"
-                value={formData.duration}
-                onChange={handleChange}
-                placeholder="Enter duration"
-                required
-              />
+              <Label htmlFor="duration">Duration</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="duration"
+                  name="duration"
+                  type="number"
+                  value={formData.duration}
+                  onChange={handleChange}
+                  placeholder="Enter duration"
+                  required
+                  className="flex-1"
+                />
+                <select
+                  value={timeUnit}
+                  onChange={(e) => setTimeUnit(e.target.value)}
+                  className="p-2 border rounded-md"
+                >
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                  <option value="weeks">Weeks</option>
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="classSize">Class Size</Label>

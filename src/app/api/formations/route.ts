@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         images: data.images || [], // Ensure images are included
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        duration: parseInt(data.duration, 10),
+        duration: data.duration,
         location: data.location,
         classSize: parseInt(data.classSize, 10),
         prerequisites: data.prerequisites,
@@ -110,7 +110,7 @@ export async function PUT(request: Request) {
         title: data.title,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        duration: parseInt(data.duration, 10),
+        duration: data.duration,
         location: data.location,
         classSize: parseInt(data.classSize, 10),
         prerequisites: data.prerequisites,

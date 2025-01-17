@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ChangeEvent, FormEvent } from 'react';
+import { useState, ChangeEvent, FormEvent, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { X } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { app } from '@/lib/firebase'; // Adjust the import based on your Firebase setup
+import { FileText, Camera } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const storage = getStorage(app);
 
@@ -31,14 +33,26 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
     profile: '',
     certificates: [] as string[],
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [certificateInput, setCertificateInput] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [tempImageUrl, setTempImageUrl] = useState<string | null>(null); // Temporary URL for the avatar
   const [isUploading, setIsUploading] = useState(false);
 
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setImageFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setImageFile(file);
+
+      // Create a temporary URL for the selected image
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setTempImageUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -66,6 +80,7 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
         setFormData({ firstName: '', lastName: '', image: '', profile: '', certificates: [] });
         setCertificateInput('');
         setImageFile(null);
+        setTempImageUrl(null); // Clear the temporary URL
       }
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -102,6 +117,10 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
     });
   };
 
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
@@ -109,6 +128,32 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="flex justify-center">
+            <div className="relative">
+              <Avatar className="w-32 h-32 ">
+                {/* Display the temporary URL if available, otherwise use the placeholder */}
+                <AvatarImage src={tempImageUrl || "/placeholder.png?height=128&width=128"} alt="Profile picture" />
+                <AvatarFallback >
+                  Upload Image
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0"
+                onClick={triggerFileInput}
+              >
+                <Camera className="h-4 w-4" />
+              </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleImageChange}
+              />
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="firstName">First Name</Label>
@@ -132,18 +177,6 @@ export default function ProfessorForm({ addProfessor }: ProfessorFormProps) {
                 required
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="image">Upload Image</Label>
-            <Input
-              type="file"
-              id="image"
-              name="image"
-              accept="image/*"
-              onChange={handleImageChange}
-              required
-            />
           </div>
 
           <div className="space-y-2">

@@ -14,6 +14,7 @@ model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
   name  String?
+  password String
 }
 
 model Professor {
@@ -21,7 +22,7 @@ model Professor {
   firstName   String
   lastName    String
   image       String
-  profile     String
+  profile     String?
   certificates String[]
   formations  Formation[] @relation("FormationToProfessor") // Many-to-many relationship
   createdAt   DateTime    @default(now())
@@ -34,11 +35,11 @@ model Formation {
   images        String[]    // List of image URLs
   startDate     DateTime
   endDate       DateTime
-  duration      Int
-  location      String
-  classSize     Int
-  prerequisites String
-  description   String
+  duration      String?
+  location      String?
+  classSize     Int?
+  prerequisites String?
+  description   String?
   detail        String
   professors    Professor[] @relation("FormationToProfessor") // Many-to-many relationship
   createdAt     DateTime    @default(now())

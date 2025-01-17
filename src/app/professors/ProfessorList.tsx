@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, ChangeEvent } from 'react';
+import { useState, ChangeEvent } from "react";
 import {
-  getStorage, ref, uploadBytes, getDownloadURL, deleteObject, getMetadata 
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  getMetadata,
 } from "firebase/storage";
 import { app } from "@/lib/firebase";
 import { X } from "lucide-react";
-import { FirebaseError } from 'firebase/app'; // Import FirebaseError for type checking
+import { FirebaseError } from "firebase/app"; // Import FirebaseError for type checking
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"; // Import Avatar components
 
 interface Professor {
   id: number;
@@ -61,37 +67,44 @@ export default function ProfessorList({
   const handleUpdateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedProfessor) return;
-  
+
     let newImageUrl = selectedProfessor.image;
-  
+
     try {
       // Check if a new image file is selected
-      const newImageFile = (document.getElementById('updateImage') as HTMLInputElement)?.files?.[0];
+      const newImageFile = (
+        document.getElementById("updateImage") as HTMLInputElement
+      )?.files?.[0];
       if (newImageFile) {
         // Upload the new image to Firebase Storage
         const newImageRef = ref(storage, `professors/${newImageFile.name}`);
         await uploadBytes(newImageRef, newImageFile);
         newImageUrl = await getDownloadURL(newImageRef);
-  
+
         // Delete the old image from Firebase Storage (if it exists)
         if (selectedProfessor.image) {
           const oldImageRef = ref(storage, selectedProfessor.image);
-  
+
           // Check if the old image exists before attempting to delete it
           try {
             await getMetadata(oldImageRef); // Check if the image exists
             await deleteObject(oldImageRef); // Delete the image if it exists
           } catch (error) {
             // Narrow down the type of the error
-            if (error instanceof FirebaseError && error.code === 'storage/object-not-found') {
-              console.log('Old image not found in Firebase Storage. Skipping deletion.');
+            if (
+              error instanceof FirebaseError &&
+              error.code === "storage/object-not-found"
+            ) {
+              console.log(
+                "Old image not found in Firebase Storage. Skipping deletion."
+              );
             } else {
               throw error; // Re-throw other errors
             }
           }
         }
       }
-  
+
       // Update the professor's data with the new image URL
       const payload = {
         firstName: selectedProfessor.firstName,
@@ -100,14 +113,14 @@ export default function ProfessorList({
         profile: selectedProfessor.profile,
         certificates: selectedProfessor.certificates || [],
       };
-  
+
       // Call the API to update the professor
       const response = await fetch(`/api/professors/${selectedProfessor.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-  
+
       if (response.ok) {
         const updatedProfessor = await response.json();
         setProfessors(
@@ -119,7 +132,7 @@ export default function ProfessorList({
         setSelectedProfessor(null);
       }
     } catch (error) {
-      console.error('Error updating professor:', error);
+      console.error("Error updating professor:", error);
     }
   };
 
@@ -175,12 +188,18 @@ export default function ProfessorList({
               key={professor.id}
               className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition-transform duration-300 hover:scale-102"
             >
-              <div className="aspect-video relative">
-                <img
-                  src={professor.image || "/placeholder.svg"}
-                  alt={`${professor.firstName} ${professor.lastName}`}
-                  className="w-full h-full object-cover"
-                />
+              <div className="flex justify-center mt-4 relative">
+                <Avatar className="w-40 h-40">
+                  <AvatarImage
+                    src={professor.image}
+                    alt={`${professor.firstName} ${professor.lastName}`}
+                    className="w-full h-full object-cover"
+                  />
+                  <AvatarFallback className="w-full h-full flex items-center justify-center bg-gray-200 text-2xl font-bold rounded-full">
+                    {professor.firstName[0]}
+                    {professor.lastName[0]}
+                  </AvatarFallback>
+                </Avatar>
               </div>
               <div className="p-6">
                 <h3 className="text-xl font-bold mb-2 text-gray-800">
@@ -279,11 +298,17 @@ export default function ProfessorList({
                 <label className="block text-lg mb-2">Image</label>
                 {/* Show old image if no new image is selected */}
                 {!newImagePreview && (
-                  <img
-                    src={selectedProfessor.image}
-                    alt="Old Professor Image"
-                    className="w-32 h-32 object-cover rounded-lg mb-4"
-                  />
+                  <Avatar className="w-32 h-32">
+                    <AvatarImage
+                      src={selectedProfessor.image}
+                      alt="Old Professor Image"
+                      className="w-full h-full object-cover rounded-lg mb-4"
+                    />
+                    <AvatarFallback className="w-full h-full flex items-center justify-center bg-gray-200 text-2xl font-bold">
+                      {selectedProfessor.firstName[0]}
+                      {selectedProfessor.lastName[0]}
+                    </AvatarFallback>
+                  </Avatar>
                 )}
                 {/* Show new image preview if a new image is selected */}
                 {newImagePreview && (

@@ -34,7 +34,7 @@ const updateFormation = async (formationId, data) => {
       images: data.images || [], // Update images
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
-      duration: parseInt(data.duration, 10),
+      duration: data.duration,
       location: data.location,
       classSize: parseInt(data.classSize, 10),
       prerequisites: data.prerequisites,
