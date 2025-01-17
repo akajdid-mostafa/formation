@@ -1,3 +1,4 @@
+// src/context/AuthContext.tsx
 'use client';
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';

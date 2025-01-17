@@ -1,9 +1,14 @@
+'use client'
+
+
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BookOpen, Users, BarChart, Calendar } from 'lucide-react'
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function Home() {
   return (
+    <ProtectedRoute>
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-4xl font-bold mb-8">Formation Management Dashboard</h1>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -109,6 +114,7 @@ export default function Home() {
         </Card>
       </div>
     </div>
+    </ProtectedRoute>
   )
 }
 
