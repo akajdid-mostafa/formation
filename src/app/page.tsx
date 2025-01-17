@@ -7,6 +7,7 @@ import { BookOpen, Users, BarChart, Calendar } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function Home() {
+  
   return (
     <ProtectedRoute>
     <div className="container mx-auto px-4 py-8">

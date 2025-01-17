@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 type AuthContextType = {
   user: any;
+  loading: boolean; // Add loading state here
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 };
@@ -13,14 +14,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true); // Add loading state
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Fetch user data if needed
-      setUser({ token });
-    }
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        setUser(null);
+      } finally {
+        setLoading(false); // Set loading to false after fetching
+      }
+    };
+
+    fetchUser();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -29,24 +44,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await response.json();
+
     if (response.ok) {
-      localStorage.setItem('token', data.token);
-      setUser({ token: data.token });
+      const userData = await response.json();
+      setUser(userData);
       router.push('/');
     } else {
-      throw new Error(data.error);
+      throw new Error('Login failed');
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
     router.push('/auth/login');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}> {/* Provide loading here */}
       {children}
     </AuthContext.Provider>
   );

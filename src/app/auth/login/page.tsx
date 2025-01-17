@@ -1,21 +1,23 @@
 // src/app/auth/login/page.tsx
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
-export default function LoginPage() {
+const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login(email, password);
-      router.push('/'); // Redirect to home page after login
-      // Redirect to home page after login
+      router.push(redirect); // Redirect to the original path or home page after login
     } catch (error) {
       alert(error);
     }
@@ -23,9 +25,30 @@ export default function LoginPage() {
 
   return (
     <form onSubmit={handleLogin}>
-      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+        required
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+        required
+      />
       <button type="submit">Login</button>
     </form>
   );
-}
+};
+
+// Wrap the LoginPage component in Suspense
+const LoginWrapper = () => (
+  <Suspense fallback={<div>Loading...</div>}>
+    <LoginPage />
+  </Suspense>
+);
+
+export default LoginWrapper;
