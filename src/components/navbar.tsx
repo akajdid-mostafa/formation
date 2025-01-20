@@ -26,7 +26,7 @@ export default function Navbar() {
   return (
     <nav className=" p-4">
       <div className="container mx-auto flex justify-between items-center">
-        <Link href="/" className="text-4xl    font-bold">
+        <Link href="/" className="text-xl    font-bold">
         Ocean Management Dashboard
         </Link>
         <button
